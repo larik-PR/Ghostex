@@ -6,13 +6,13 @@
 //! an action leaves a request behind and `crate::questions::events` finishes the work when the
 //! answer arrives.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::action::{ActionKind, UserAction};
 use crate::effect::Effect;
 use crate::questions::async_controller;
 use crate::questions::drafts::{
-    drafts_key, encode_drafts, notice_key, remaining_drafts, AnswerDrafts,
+    AnswerDrafts, drafts_key, encode_drafts, notice_key, remaining_drafts,
 };
 use crate::questions::gates;
 use crate::questions::interactive::{is_answered, select_question_option};
@@ -185,6 +185,13 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     index,
                 ));
                 state.core.effects_not_awaited = true;
+                // Codex's option picker is single-choice: selecting an option is the answer,
+                // so send it on this click instead of requiring a second Send answer click.
+                let before_send = effects.len();
+                effects.extend(async_submit(state, prompt.as_ref(), notice.as_ref(), false));
+                if effects.len() > before_send {
+                    state.core.request_publish();
+                }
             }
         }
         ActionKind::AsyncQuestionSend | ActionKind::AsyncQuestionSkip => {
